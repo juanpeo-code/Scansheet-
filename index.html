@@ -1101,17 +1101,18 @@ function sendJsonResponse(data) {
       resultErrorBanner.classList.add('hidden');
       resultSuccessBanner.classList.add('hidden');
 
-      try {
-        // Send as text/plain to bypass CORS preflight (OPTIONS) which Google Apps Script rejects
+            try {
+        // Send as text/plain and use no-cors mode to fully bypass cross-domain security blocks
         const response = await fetch(targetUrl, {
-        fetch(url, {
-  method: "POST",
-  mode: "no-cors", // Crucial: tricks browser to skip cross-domain blocking
-  headers: {
-    "Content-Type": "text/plain;charset=utf-8" // Crucial
-  },
-  body: JSON.stringify({ serialNumber: scannedText })
-})
+          method: 'POST',
+          mode: 'no-cors', // <-- ADDED THIS LINE
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            serialNumber: serial // <-- FIXED THIS PAYLOAD TO MATCH APPS SCRIPT
+          }),
+          redirect: 'follow'
+        });
+
 
 
             serialNumber: serial,
