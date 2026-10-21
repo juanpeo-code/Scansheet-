@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@keyframes scanBeam {
+  0% {
+    top: 10%;
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    top: 90%;
+    opacity: 0.3;
+  }
+}
+
+/* Ensure video inside html5-qrcode covers view cleanly without distortion */
+#interactive-barcode-reader video {
+  border-radius: 1.5rem;
+  object-fit: cover !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+#interactive-barcode-reader {
+  border: none !important;
+}
+

@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ScanSheet - Mobile Barcode to Google Sheets</title>
+  <meta name="description" content="Mobile barcode scanner that logs serial numbers with timestamps into Google Sheets via Google Apps Script.">
+  <meta name="theme-color" content="#0f172a">
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- HTML5 QR Code Library via CDN -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- Canvas Confetti via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.4/dist/confetti.browser.min.js"></script>
+
+  <style>
+    @keyframes scanBeam {
+      0% { top: 8%; opacity: 0.3; }
+      50% { opacity: 1; }
+      100% { top: 92%; opacity: 0.3; }
+    }
+    .animate-scan-beam {
+      animation: scanBeam 2s ease-in-out infinite alternate;
+    }
+    #interactive-reader video {
+      border-radius: 1.5rem;
+      object-fit: cover !important;
+      width: 100% !important;
+      height: 100% !important;
+    }
+    #interactive-reader {
+      border: none !important;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-emerald-500 selection:text-white pb-12">
+
+  <!-- Top Navigation Header -->
+  <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-40 px-3.5 sm:px-4 py-3">
+    <div class="max-w-md mx-auto flex items-center justify-between">
+      
+      <!-- Brand & Tagline -->
+      <div class="flex items-center space-x-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-slate-950">
+          <svg class="w-5 h-5 font-bold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 7V5a2 2 0 012-2h2m10 0h2a2 2 0 012 2v2m0 10v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 10h10M7 14h10M10 7v10" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="font-bold text-white text-base tracking-tight">ScanSheet</span>
+            <span class="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              Mobile
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400 leading-none">Barcode &rarr; Google Sheet</p>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center space-x-1.5">
+        <button id="btn-open-script-modal" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1 text-xs font-semibold" title="Google Apps Script Code">
+          <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
+          <span class="hidden sm:inline">Apps Script</span>
+        </button>
+
+        <button id="btn-open-manual-modal" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition" title="Manual Serial Entry">
+          <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+        </button>
+
+        <button id="btn-open-settings" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition relative" title="Settings">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span id="settings-warning-dot" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping"></span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-md w-full mx-auto px-3.5 sm:px-4 py-4 space-y-4">
+
+    <!-- Missing Web App URL Warning Banner -->
+    <div id="url-alert-banner" class="hidden p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-200 text-xs flex items-center justify-between gap-3 shadow-lg">
+      <div class="flex items-center space-x-2">
+        <svg class="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <span class="leading-snug">Google Apps Script URL is missing.</span>
+      </div>
+      <button id="btn-banner-configure" class="px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 font-bold hover:bg-amber-300 transition text-[11px] shrink-0">
+        Configure Now
+      </button>
+    </div>
+
+    <!-- Camera Viewport Card -->
+    <div class="relative rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl overflow-hidden">
+      
+      <!-- Video Viewfinder -->
+      <div class="relative w-full aspect-[4/3] bg-black flex items-center justify-center overflow-hidden">
+        <div id="interactive-reader" class="w-full h-full [&_video]:w-full [&_video]:h-full [&_video]:object-cover"></div>
+
+        <!-- Initial Placeholder State -->
+        <div id="camera-loading" class="absolute inset-0 bg-slate-950/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center space-y-3 z-20">
+          <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+            <svg class="w-6 h-6 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </div>
+          <div class="text-sm font-semibold text-white">Opening rear camera...</div>
+          <p class="text-xs text-slate-400 max-w-xs">Initializing hardware video stream with barcode decoders.</p>
+          <button id="btn-manual-start-camera" class="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs hover:bg-emerald-400 transition shadow-lg shadow-emerald-500/20 mt-2">
+            Start Camera
+          </button>
+        </div>
+
+        <!-- Camera Error / No Hardware Overlay -->
+        <div id="camera-error" class="hidden absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center p-5 text-center space-y-3 z-20">
+          <div class="w-11 h-11 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div id="camera-error-title" class="text-sm font-bold text-white">Camera Hardware Not Found</div>
+          <p id="camera-error-message" class="text-xs text-slate-400 max-w-xs leading-relaxed">
+            No live camera was detected. You can upload a barcode photo directly, enter the serial manually, or retry.
+          </p>
+          <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
+            <button id="btn-upload-file-trigger" class="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition flex items-center gap-1.5 shadow-lg shadow-emerald-500/20">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span>Scan from Image</span>
+            </button>
+            <button id="btn-error-manual-trigger" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition">
+              Manual Entry
+            </button>
+            <button id="btn-retry-camera" class="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-xs transition border border-slate-800">
+              Retry
+            </button>
+          </div>
+          <input type="file" id="input-barcode-file" accept="image/*" class="hidden">
+        </div>
+
+        <!-- Scanning Reticle with Laser Beam -->
+        <div id="scan-reticle" class="hidden absolute inset-0 pointer-events-none flex items-center justify-center z-10">
+          <div class="relative w-[80%] h-[60%] border-2 border-emerald-400/80 rounded-2xl shadow-[0_0_25px_rgba(16,185,129,0.35)]">
+            <div class="absolute -top-1 -left-1 w-5 h-5 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg"></div>
+            <div class="absolute -top-1 -right-1 w-5 h-5 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg"></div>
+            <div class="absolute -bottom-1 -left-1 w-5 h-5 border-b-4 border-l-4 border-emerald-400 rounded-bl-lg"></div>
+            <div class="absolute -bottom-1 -right-1 w-5 h-5 border-b-4 border-r-4 border-emerald-400 rounded-br-lg"></div>
+            <div class="absolute left-2 right-2 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_12px_#34d399] animate-scan-beam"></div>
+          </div>
+        </div>
+
+        <!-- Paused Overlay Badge -->
+        <div id="scan-paused-badge" class="hidden absolute inset-0 bg-slate-950/60 backdrop-blur-[2px] flex items-center justify-center z-10">
+          <div class="px-4 py-2 rounded-2xl bg-slate-900/90 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 shadow-xl">
+            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            <span>Scanner Paused (Scan Detected)</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Viewfinder Toolbar -->
+      <div class="px-4 py-3 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs">
+        <div class="flex items-center space-x-2">
+          <span id="scanner-status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+          <span id="scanner-status-text" class="font-medium text-slate-300">Ready</span>
+        </div>
+
+        <!-- Multi-Camera Selector (shown if > 1 camera detected) -->
+        <div id="camera-select-container" class="hidden max-w-[120px]">
+          <select id="select-camera" class="bg-slate-800 border border-slate-700 text-slate-200 text-[11px] rounded-lg px-2 py-1 truncate focus:outline-none focus:border-emerald-500 w-full">
+          </select>
+        </div>
+
+        <div class="flex items-center space-x-1.5">
+          <!-- Upload Image scan button -->
+          <button id="btn-scan-image" class="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition" title="Scan Barcode from Image File">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </button>
+
+          <!-- Torch toggle button -->
+          <button id="btn-toggle-torch" class="hidden p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition" title="Toggle Flashlight">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </button>
+
+          <!-- Pause / Resume button -->
+          <button id="btn-toggle-pause" class="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition" title="Pause / Resume">
+            <svg id="icon-pause" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <svg id="icon-play" class="w-4 h-4 text-emerald-400 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+
+          <!-- Restart Camera -->
+          <button id="btn-restart-camera" class="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition" title="Restart Camera">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Active Scan Result Card -->
+    <div id="result-card" class="hidden p-4 sm:p-5 rounded-3xl bg-slate-900 border border-emerald-500/30 shadow-2xl space-y-4">
+      
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <span class="relative flex h-2.5 w-2.5">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+          </span>
+          <span class="text-xs font-bold uppercase tracking-wider text-emerald-400">
+            Detected Barcode
+          </span>
+          <span id="result-format-badge" class="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+            BARCODE
+          </span>
+        </div>
+        <span id="result-time" class="text-[11px] text-slate-400 font-mono">Just now</span>
+      </div>
+
+      <!-- Serial Number Text Box -->
+      <div class="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 relative">
+        <div class="text-[10px] text-slate-500 uppercase font-semibold tracking-wider">
+          Extracted Serial / String
+        </div>
+        <div class="flex items-center justify-between mt-1">
+          <div id="result-serial-text" class="font-mono text-xl sm:text-2xl font-extrabold text-white tracking-wide break-all select-all pr-2">
+            ---
+          </div>
+          <button id="btn-copy-serial" class="p-2 rounded-xl bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800 transition shrink-0" title="Copy serial">
+            <svg id="icon-copy-idle" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            <svg id="icon-copy-done" class="w-4 h-4 text-emerald-400 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Auto-Submit Countdown Bar -->
+      <div id="auto-submit-countdown-bar" class="hidden flex items-center justify-between text-xs px-1 text-slate-400">
+        <span class="flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 animate-spin text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span>Auto-uploading to Google Sheet...</span>
+        </span>
+        <button id="btn-cancel-countdown" class="text-[11px] underline text-slate-400 hover:text-white">
+          Cancel auto-upload
+        </button>
+      </div>
+
+      <!-- Upload Success Banner -->
+      <div id="result-success-banner" class="hidden p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <div class="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+            <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <div>
+            <div id="result-success-text" class="font-semibold">Saved to Google Sheet!</div>
+            <div id="result-row-number-text" class="text-[11px] text-emerald-400/80">Appended sequentially from row 2 onwards</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upload Error Banner -->
+      <div id="result-error-banner" class="hidden p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-start space-x-2">
+        <svg class="w-4 h-4 text-rose-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <div class="space-y-1">
+          <div class="font-semibold text-rose-200">Upload Issue</div>
+          <div id="result-error-text" class="text-[11px] text-rose-300/90 leading-tight">
+            Could not reach Google Apps Script endpoint.
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center gap-2 pt-1">
+        <button id="btn-submit-sheet" class="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-sm transition flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/20 active:scale-95 disabled:opacity-50">
+          <svg id="spinner-submit" class="hidden w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <svg id="icon-submit-cloud" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+          <span id="label-submit-btn">Submit to Sheet</span>
+        </button>
+
+        <button id="btn-rescan-next" class="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-medium text-xs transition">
+          Rescan
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Quick Mode Toggles -->
+    <div class="grid grid-cols-2 gap-2.5 text-xs">
+      <button id="btn-quick-manual" class="flex items-center justify-center space-x-2 p-3 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white transition active:scale-98">
+        <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+        <span class="font-semibold">Manual Entry</span>
+      </button>
+
+      <label class="flex items-center justify-between p-3 rounded-2xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-slate-700 transition">
+        <span class="font-semibold text-slate-300">Auto-Submit</span>
+        <input type="checkbox" id="toggle-autosubmit" checked class="w-4 h-4 rounded text-emerald-500 bg-slate-800 border-slate-700 focus:ring-emerald-500/20 cursor-pointer">
+      </label>
+    </div>
+
+    <!-- Information Card -->
+    <div class="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 text-xs text-slate-400 space-y-1.5">
+      <div class="flex items-center justify-between text-slate-300 font-semibold text-[11px]">
+        <span class="flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Target: Row 2+ Sequential Logging
+        </span>
+        <button id="btn-info-view-guide" class="text-emerald-400 hover:underline flex items-center gap-0.5">
+          View Guide
+        </button>
+      </div>
+      <p class="text-[11px] leading-relaxed text-slate-400">
+        Row 1 contains <code class="text-slate-300 font-mono">Timestamp</code> and <code class="text-slate-300 font-mono">Serial Number</code>. Each scan lands automatically in Column A &amp; Column B sequentially.
+      </p>
+    </div>
+
+    <!-- Scan History Card -->
+    <div class="rounded-3xl bg-slate-900 border border-slate-800 p-4 space-y-3.5 shadow-xl">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300">
+            Scan History
+          </h2>
+          <span id="history-badge-count" class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-mono text-[10px]">
+            0
+          </span>
+        </div>
+
+        <div class="flex items-center space-x-1.5">
+          <button id="btn-export-csv" class="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition" title="Export CSV">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+          </button>
+          <button id="btn-clear-history" class="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-rose-400 hover:bg-slate-700 transition" title="Clear History">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- History List -->
+      <div id="history-container" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+        <div id="history-empty" class="text-center py-8 text-slate-500 text-xs">
+          No scans recorded yet. Aim camera at a barcode.
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- Settings Modal -->
+  <div id="modal-settings" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-2 sm:p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="font-bold text-white text-base">Scanner Settings</h3>
+            <p class="text-[11px] text-slate-400">Google Sheet endpoint &amp; scanner behavior</p>
+          </div>
+        </div>
+        <button id="btn-close-settings" class="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+
+      <div class="p-5 overflow-y-auto space-y-5 text-xs flex-1">
+        
+        <!-- Google Apps Script URL field -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="font-semibold text-slate-200">
+              Google Apps Script Web App URL
+            </label>
+            <button id="btn-settings-open-script" class="text-[11px] text-emerald-400 hover:text-emerald-300 font-medium underline">
+              View Part 1 Code
+            </button>
+          </div>
+
+          <div class="relative">
+            <input type="url" id="input-script-url" placeholder="https://script.google.com/macros/s/.../exec"
+                   class="w-full px-3.5 py-3 rounded-2xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono text-xs pr-10">
+          </div>
+
+          <p class="text-[11px] text-slate-400 leading-relaxed">
+            Must start with <code class="text-emerald-400 font-mono">https://script.google.com/macros/s/.../exec</code>. Make sure it is deployed with <strong class="text-slate-300">Who has access: Anyone</strong>.
+          </p>
+
+          <div class="flex items-center gap-2 pt-1">
+            <button id="btn-test-connection" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs transition flex items-center space-x-1.5">
+              <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              <span>Test Connection</span>
+            </button>
+
+            <button id="btn-save-settings" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition shadow-lg shadow-emerald-500/20 ml-auto">
+              Save URL
+            </button>
+          </div>
+
+          <div id="test-connection-feedback" class="hidden p-3 rounded-2xl border text-xs flex items-start space-x-2 mt-2"></div>
+        </div>
+
+        <!-- Scanning Preferences -->
+        <div class="border-t border-slate-800/80 pt-4 space-y-3">
+          <h4 class="font-semibold text-slate-400 uppercase tracking-wider text-[11px]">
+            Scan Behavior
+          </h4>
+
+          <div class="flex items-center justify-between p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
+            <div>
+              <div class="font-semibold text-white">Continuous Scan Mode</div>
+              <div class="text-[11px] text-slate-400">Automatically resumes camera after each successful upload</div>
+            </div>
+            <input type="checkbox" id="toggle-continuous" class="w-5 h-5 rounded-lg text-emerald-500 bg-slate-900 border-slate-700 cursor-pointer">
+          </div>
+
+          <div class="flex items-center justify-between p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
+            <div>
+              <div class="font-semibold text-white">Audio Beep Tone</div>
+              <div class="text-[11px] text-slate-400">Play pleasant sound upon barcode detection</div>
+            </div>
+            <input type="checkbox" id="toggle-sound" checked class="w-5 h-5 rounded-lg text-emerald-500 bg-slate-900 border-slate-700 cursor-pointer">
+          </div>
+
+          <div class="flex items-center justify-between p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
+            <div>
+              <div class="font-semibold text-white">Haptic Vibration</div>
+              <div class="text-[11px] text-slate-400">Vibrates smartphone when a barcode is captured</div>
+            </div>
+            <input type="checkbox" id="toggle-haptics" checked class="w-5 h-5 rounded-lg text-emerald-500 bg-slate-900 border-slate-700 cursor-pointer">
+          </div>
+        </div>
+
+      </div>
+
+      <div class="px-5 py-3 border-t border-slate-800 bg-slate-900/90 flex justify-end">
+        <button id="btn-close-settings-footer" class="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition">
+          Done
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Manual Entry Modal -->
+  <div id="modal-manual" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-2 sm:p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="font-bold text-white text-base">Manual Serial Entry</h3>
+            <p class="text-[11px] text-slate-400">For torn or damaged barcode labels</p>
+          </div>
+        </div>
+        <button id="btn-close-manual" class="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+
+      <form id="form-manual-entry" class="p-5 space-y-4 text-xs">
+        <div class="space-y-1.5">
+          <label class="font-semibold text-slate-200">Serial Number / Barcode Text</label>
+          <input type="text" id="input-manual-serial" placeholder="e.g. SN-98234-A71"
+                 class="w-full px-4 py-3 rounded-2xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono text-sm uppercase tracking-wide">
+          <p id="manual-error-text" class="hidden text-[11px] text-rose-400 font-medium"></p>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" id="btn-cancel-manual" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs transition">
+            Cancel
+          </button>
+          <button type="submit" id="btn-submit-manual" class="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition shadow-lg shadow-emerald-500/20 active:scale-95 flex items-center space-x-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <span>Upload to Sheet</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Apps Script Code Modal (Part 1) -->
+  <div id="modal-script" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-2 sm:p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+      
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="font-bold text-white text-base">Part 1: Google Apps Script Backend</h3>
+            <p class="text-[11px] text-slate-400">Paste into Extensions &gt; Apps Script</p>
+          </div>
+        </div>
+        <button id="btn-close-script" class="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+
+      <div class="p-5 overflow-y-auto space-y-4 text-xs flex-1">
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400 text-xs">
+            Appends row <code class="text-emerald-400">[Timestamp, Serial]</code> sequentially from row 2 onwards:
+          </span>
+          <button id="btn-copy-apps-script" class="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition flex items-center space-x-1.5 shadow-lg shadow-emerald-500/10 active:scale-95">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            <span id="label-copy-apps-script">Copy Script Code</span>
+          </button>
+        </div>
+
+        <div class="rounded-2xl bg-slate-950 border border-slate-800 p-4 font-mono text-[11px] text-emerald-300/90 overflow-x-auto leading-relaxed max-h-[45vh]">
+          <pre id="pre-apps-script-code">const SPREADSHEET_ID = ""; // Leave blank if script is bound via Extensions > Apps Script
+const SHEET_NAME = "Scans";
+
+function doPost(e) {
+  const lock = LockService.getScriptLock();
+  lock.tryLock(10000);
+
+  try {
+    let payload = {};
+    if (e && e.postData && e.postData.contents) {
+      try { payload = JSON.parse(e.postData.contents); } catch (err) { payload = e.parameter || {}; }
+    } else if (e && e.parameter) {
+      payload = e.parameter;
+    }
+
+    const serialNumber = (payload.serialNumber || payload.serial || "").toString().trim();
+    if (!serialNumber) {
+      return sendJsonResponse({ status: "error", message: "Missing 'serialNumber' in request." });
+    }
+
+    let ss = (SPREADSHEET_ID && SPREADSHEET_ID.trim()) 
+      ? SpreadsheetApp.openById(SPREADSHEET_ID.trim()) 
+      : SpreadsheetApp.getActiveSpreadsheet();
+
+    if (!ss) {
+      return sendJsonResponse({ status: "error", message: "Could not open Google Sheet." });
+    }
+
+    let sheet = ss.getSheetByName(SHEET_NAME) || ss.getSheets()[0];
+
+    // Ensure Row 1 headers exist
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(["Timestamp", "Serial Number"]);
+      sheet.getRange("A1:B1").setFontWeight("bold").setBackground("#f1f5f9");
+    }
+
+    const now = new Date();
+    const timeZone = ss.getSpreadsheetTimeZone() || "GMT";
+    const formattedTimestamp = Utilities.formatDate(now, timeZone, "yyyy-MM-dd HH:mm:ss");
+
+    // Column A = Timestamp, Column B = Serial Number (preserves leading zeroes)
+    sheet.appendRow([formattedTimestamp, "'" + serialNumber]);
+
+    return sendJsonResponse({
+      status: "success",
+      message: "Scan appended successfully.",
+      row: sheet.getLastRow(),
+      timestamp: formattedTimestamp,
+      serialNumber: serialNumber
+    });
+
+  } catch (err) {
+    return sendJsonResponse({ status: "error", message: err.toString() });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function doGet(e) {
+  return sendJsonResponse({ status: "ok", message: "ScanSheet Web App is live." });
+}
+
+function sendJsonResponse(data) {
+  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+}</pre>
+        </div>
+
+        <div class="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-1.5 text-slate-300">
+          <div class="font-bold text-white text-xs">Quick Deployment Checklist:</div>
+          <ol class="list-decimal list-inside space-y-1 text-slate-400 text-[11px]">
+            <li>Open Google Sheet &gt; <strong>Extensions &gt; Apps Script</strong>.</li>
+            <li>Paste the code above and click Save.</li>
+            <li>Click <strong>Deploy &gt; New deployment</strong> &gt; Select type: <strong>Web app</strong>.</li>
+            <li>Set <em>Execute as:</em> <strong>Me</strong> and <em>Who has access:</em> <strong>Anyone</strong>.</li>
+            <li>Copy the resulting Web App URL ending in <code class="text-emerald-400">/exec</code> and paste into Settings.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="px-5 py-3 border-t border-slate-800 bg-slate-900/90 flex justify-end">
+        <button id="btn-close-script-footer" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs transition">
+          Close
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== JAVASCRIPT ENGINE ==================== -->
+  <script>
+    // Audio Synthesizer (Web Audio API)
+    let audioCtx = null;
+    function getAudioContext() {
+      if (!audioCtx) {
+        const AudioClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioClass) audioCtx = new AudioClass();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+      return audioCtx;
+    }
+
+    function playBeep() {
+      if (!document.getElementById('toggle-sound').checked) return;
+      try {
+        const ctx = getAudioContext();
+        if (!ctx) return;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1046.5, ctx.currentTime);
+        osc.frequency.setValueAtTime(1318.5, ctx.currentTime + 0.05);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.15);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.15);
+      } catch (e) {}
+    }
+
+    function playSuccessChime() {
+      if (!document.getElementById('toggle-sound').checked) return;
+      try {
+        const ctx = getAudioContext();
+        if (!ctx) return;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+        osc.frequency.setValueAtTime(880, ctx.currentTime + 0.08);
+        osc.frequency.setValueAtTime(1174.66, ctx.currentTime + 0.16);
+        gain.gain.setValueAtTime(0.25, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.35);
+      } catch (e) {}
+    }
+
+    function triggerHaptic(type = 'light') {
+      if (!document.getElementById('toggle-haptics').checked) return;
+      if ('vibrate' in navigator) {
+        try {
+          if (type === 'light') navigator.vibrate(50);
+          else if (type === 'success') navigator.vibrate([60, 40, 80]);
+        } catch (e) {}
+      }
+    }
+
+    // App State
+    let html5QrCode = null;
+    let isScanning = false;
+    let isPaused = false;
+    let activeSerial = null;
+    let activeFormat = 'BARCODE';
+    let autoSubmitTimer = null;
+    let torchTrack = null;
+    let torchOn = false;
+
+    // Load LocalStorage State
+    let webAppUrl = localStorage.getItem('scansheet_script_url') || '';
+    let scanHistory = [];
+    try {
+      scanHistory = JSON.parse(localStorage.getItem('scansheet_history') || '[]');
+    } catch(e) { scanHistory = []; }
+
+    let availableCameras = [];
+    let currentCameraId = null;
+
+    // DOM Elements
+    const inputScriptUrl = document.getElementById('input-script-url');
+    const urlBanner = document.getElementById('url-alert-banner');
+    const settingsWarningDot = document.getElementById('settings-warning-dot');
+    const cameraLoading = document.getElementById('camera-loading');
+    const cameraError = document.getElementById('camera-error');
+    const cameraErrorTitle = document.getElementById('camera-error-title');
+    const cameraErrorMessage = document.getElementById('camera-error-message');
+    const scanReticle = document.getElementById('scan-reticle');
+    const scanPausedBadge = document.getElementById('scan-paused-badge');
+    const statusDot = document.getElementById('scanner-status-dot');
+    const statusText = document.getElementById('scanner-status-text');
+    const btnTogglePause = document.getElementById('btn-toggle-pause');
+    const iconPause = document.getElementById('icon-pause');
+    const iconPlay = document.getElementById('icon-play');
+    const btnToggleTorch = document.getElementById('btn-toggle-torch');
+    const selectCamera = document.getElementById('select-camera');
+    const cameraSelectContainer = document.getElementById('camera-select-container');
+    const inputBarcodeFile = document.getElementById('input-barcode-file');
+    const btnUploadFileTrigger = document.getElementById('btn-upload-file-trigger');
+    const btnErrorManualTrigger = document.getElementById('btn-error-manual-trigger');
+    const btnScanImage = document.getElementById('btn-scan-image');
+
+    const resultCard = document.getElementById('result-card');
+    const resultSerialText = document.getElementById('result-serial-text');
+    const resultFormatBadge = document.getElementById('result-format-badge');
+    const resultTime = document.getElementById('result-time');
+    const autoSubmitCountdownBar = document.getElementById('auto-submit-countdown-bar');
+    const resultSuccessBanner = document.getElementById('result-success-banner');
+    const resultSuccessText = document.getElementById('result-success-text');
+    const resultRowNumberText = document.getElementById('result-row-number-text');
+    const resultErrorBanner = document.getElementById('result-error-banner');
+    const resultErrorText = document.getElementById('result-error-text');
+    const btnSubmitSheet = document.getElementById('btn-submit-sheet');
+    const spinnerSubmit = document.getElementById('spinner-submit');
+    const iconSubmitCloud = document.getElementById('icon-submit-cloud');
+    const labelSubmitBtn = document.getElementById('label-submit-btn');
+
+    const historyContainer = document.getElementById('history-container');
+    const historyBadgeCount = document.getElementById('history-badge-count');
+
+    // Modals
+    const modalSettings = document.getElementById('modal-settings');
+    const modalManual = document.getElementById('modal-manual');
+    const modalScript = document.getElementById('modal-script');
+
+    // Initialize UI settings
+    if (webAppUrl) {
+      inputScriptUrl.value = webAppUrl;
+      urlBanner.classList.add('hidden');
+      settingsWarningDot.classList.add('hidden');
+    } else {
+      urlBanner.classList.remove('hidden');
+      settingsWarningDot.classList.remove('hidden');
+    }
+
+    // Render History
+    function renderHistory() {
+      historyBadgeCount.textContent = scanHistory.length;
+      if (scanHistory.length === 0) {
+        historyContainer.innerHTML = '<div class="text-center py-8 text-slate-500 text-xs">No scans recorded yet. Aim camera at a barcode.</div>';
+        return;
+      }
+
+      historyContainer.innerHTML = scanHistory.map(item => `
+        <div class="p-3 rounded-2xl bg-slate-950/80 border border-slate-800/80 flex items-center justify-between text-xs">
+          <div class="truncate pr-2 space-y-0.5">
+            <div class="flex items-center space-x-2">
+              <span class="font-mono font-bold text-white tracking-wide truncate">${escapeHtml(item.serialNumber)}</span>
+              <span class="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-slate-900 text-slate-400 border border-slate-800">${item.format || 'CODE'}</span>
+            </div>
+            <div class="text-[10px] text-slate-400">
+              ${new Date(item.timestamp).toLocaleTimeString()} &bull; 
+              ${item.rowNumber ? `<span class="text-emerald-400">Row #${item.rowNumber}</span>` : (item.status === 'synced' ? 'Uploaded' : 'Failed')}
+            </div>
+          </div>
+          <div class="flex items-center space-x-1 shrink-0">
+            ${item.status === 'synced' ? `
+              <span class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                ✓ Synced
+              </span>
+            ` : `
+              <button onclick="retryHistoryItem('${item.id}')" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 transition">
+                Retry
+              </button>
+            `}
+          </div>
+        </div>
+      `).join('');
+    }
+    renderHistory();
+
+    function escapeHtml(str) {
+      return (str || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+    }
+
+    // Helper: start scanner on an instance with given camera config
+    async function startScannerOnConfig(config) {
+      const qrboxFn = (viewfinderWidth, viewfinderHeight) => {
+        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+        return {
+          width: Math.max(Math.floor(minEdge * 0.85), 220),
+          height: Math.max(Math.floor(minEdge * 0.55), 140)
+        };
+      };
+
+      await html5QrCode.start(
+        config,
+        {
+          fps: 15,
+          qrbox: qrboxFn,
+          aspectRatio: 1.333333
+        },
+        onScanSuccess,
+        () => {} // Frame discard handler
+      );
+    }
+
+    // Robust Camera Scanner Initialization with Multi-Stage Fallbacks
+    async function initScanner(preferCameraId = null) {
+      cameraError.classList.add('hidden');
+      cameraLoading.classList.remove('hidden');
+      scanReticle.classList.add('hidden');
+      statusText.textContent = "Detecting cameras...";
+      statusDot.className = "w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse";
+
+      if (html5QrCode) {
+        try {
+          if (html5QrCode.isScanning) await html5QrCode.stop();
+        } catch(e) {}
+      }
+
+      html5QrCode = new Html5Qrcode("interactive-reader", {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.DATA_MATRIX
+        ],
+        verbose: false
+      });
+
+      // 1. Enumerate physical cameras first to prevent NotFoundError
+      let devices = [];
+      try {
+        devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 0) {
+          availableCameras = devices;
+          // Populate camera switcher UI if multiple cameras found
+          if (devices.length > 1) {
+            cameraSelectContainer.classList.remove('hidden');
+            selectCamera.innerHTML = devices.map((d, i) => `
+              <option value="${d.id}">${d.label || 'Camera ' + (i + 1)}</option>
+            `).join('');
+          } else {
+            cameraSelectContainer.classList.add('hidden');
+          }
+        }
+      } catch (enumErr) {
+        console.debug("Camera enumeration skipped:", enumErr);
+      }
+
+      let started = false;
+      let lastErr = null;
+
+      // 2. Try preferred or selected camera by ID if available
+      if (devices.length > 0) {
+        let chosenId = preferCameraId || currentCameraId;
+        if (!chosenId || !devices.some(d => d.id === chosenId)) {
+          // Find back/rear camera
+          const backCam = devices.find(d => {
+            const lbl = (d.label || '').toLowerCase();
+            return lbl.includes('back') || lbl.includes('rear') || lbl.includes('environment');
+          });
+          chosenId = backCam ? backCam.id : devices[0].id;
+        }
+
+        currentCameraId = chosenId;
+        if (selectCamera) selectCamera.value = chosenId;
+
+        try {
+          await startScannerOnConfig(chosenId);
+          started = true;
+        } catch (idErr) {
+          console.warn("Could not start chosen camera ID, attempting fallback:", idErr);
+          lastErr = idErr;
+          // Try first camera if chosen was different
+          if (devices.length > 1 && chosenId !== devices[0].id) {
+            try {
+              currentCameraId = devices[0].id;
+              if (selectCamera) selectCamera.value = currentCameraId;
+              await startScannerOnConfig(devices[0].id);
+              started = true;
+            } catch (firstErr) {
+              lastErr = firstErr;
+            }
+          }
+        }
+      }
+
+      // 3. Fallback to facingMode: "environment" (Mobile rear camera)
+      if (!started) {
+        try {
+          await startScannerOnConfig({ facingMode: "environment" });
+          started = true;
+        } catch (envErr) {
+          console.debug("facingMode environment unavailable:", envErr);
+          lastErr = envErr;
+        }
+      }
+
+      // 4. Fallback to facingMode: "user" (Webcam, laptop camera, front camera)
+      if (!started) {
+        try {
+          await startScannerOnConfig({ facingMode: "user" });
+          started = true;
+        } catch (userErr) {
+          console.debug("facingMode user unavailable:", userErr);
+          lastErr = userErr;
+        }
+      }
+
+      // 5. Fallback to generic video stream constraint
+      if (!started) {
+        try {
+          await startScannerOnConfig(true);
+          started = true;
+        } catch (genericErr) {
+          console.debug("Generic video stream unavailable:", genericErr);
+          lastErr = genericErr;
+        }
+      }
+
+      // If started successfully
+      if (started) {
+        isScanning = true;
+        isPaused = false;
+        cameraLoading.classList.add('hidden');
+        cameraError.classList.add('hidden');
+        scanReticle.classList.remove('hidden');
+        statusText.textContent = "Scanning active";
+        statusDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse";
+
+        // Check Torch support
+        try {
+          const videoEl = document.querySelector('#interactive-reader video');
+          if (videoEl && videoEl.srcObject) {
+            const track = videoEl.srcObject.getVideoTracks()[0];
+            const caps = track.getCapabilities ? track.getCapabilities() : {};
+            if (caps && caps.torch) {
+              torchTrack = track;
+              btnToggleTorch.classList.remove('hidden');
+            } else {
+              btnToggleTorch.classList.add('hidden');
+            }
+          }
+        } catch(e) {}
+      } else {
+        // Handle no camera hardware or permission denial gracefully
+        console.error("Camera initialisation error:", lastErr);
+        cameraLoading.classList.add('hidden');
+        cameraError.classList.remove('hidden');
+        scanReticle.classList.add('hidden');
+        statusText.textContent = "No camera";
+        statusDot.className = "w-2.5 h-2.5 rounded-full bg-amber-500";
+
+        const errStr = String(lastErr?.message || lastErr || '');
+        if (errStr.includes('NotFound') || errStr.includes('Requested device not found') || errStr.includes('DevicesNotFoundError')) {
+          cameraErrorTitle.textContent = "No Camera Hardware Detected";
+          cameraErrorMessage.textContent = "No live camera was found on this device or preview environment. You can scan barcodes directly by uploading a photo, or enter serial numbers manually.";
+        } else if (errStr.includes('NotAllowed') || errStr.includes('Permission denied')) {
+          cameraErrorTitle.textContent = "Camera Access Blocked";
+          cameraErrorMessage.textContent = "Camera access was denied. Please allow camera permissions in your browser address bar.";
+        } else {
+          cameraErrorTitle.textContent = "Camera Unavailable";
+          cameraErrorMessage.textContent = errStr || "Could not open video stream. You can upload an image or enter serial numbers manually.";
+        }
+      }
+    }
+
+    // On Barcode Scan Success
+    function onScanSuccess(decodedText, decodedResult) {
+      if (isPaused) return;
+
+      activeSerial = decodedText.trim();
+      activeFormat = (decodedResult && decodedResult.result && decodedResult.result.format && decodedResult.result.format.formatName) || 'BARCODE';
+
+      playBeep();
+      triggerHaptic('light');
+
+      // Pause scanner
+      if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.pause(true);
+        isPaused = true;
+      }
+
+      statusText.textContent = "Barcode detected";
+      statusDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400";
+      scanPausedBadge.classList.remove('hidden');
+      iconPause.classList.add('hidden');
+      iconPlay.classList.remove('hidden');
+
+      // Trigger Confetti
+      try {
+        if (typeof confetti === 'function') {
+          confetti({
+            particleCount: 25,
+            spread: 60,
+            origin: { y: 0.7 },
+            colors: ['#10b981', '#34d399', '#059669', '#38bdf8']
+          });
+        }
+      } catch(e) {}
+
+      // Update Result Card
+      resultSerialText.textContent = activeSerial;
+      resultFormatBadge.textContent = activeFormat.replace(/_/g, ' ');
+      resultTime.textContent = new Date().toLocaleTimeString();
+      resultCard.classList.remove('hidden');
+      resultSuccessBanner.classList.add('hidden');
+      resultErrorBanner.classList.add('hidden');
+
+      // Auto Submit logic
+      if (document.getElementById('toggle-autosubmit').checked) {
+        autoSubmitCountdownBar.classList.remove('hidden');
+        clearTimeout(autoSubmitTimer);
+        autoSubmitTimer = setTimeout(() => {
+          autoSubmitCountdownBar.classList.add('hidden');
+          submitScan(activeSerial, activeFormat);
+        }, 900);
+      } else {
+        autoSubmitCountdownBar.classList.add('hidden');
+      }
+    }
+
+    // Upload Scan to Google Apps Script
+    async function submitScan(serial, format = 'BARCODE') {
+      const targetUrl = webAppUrl || inputScriptUrl.value.trim();
+      if (!targetUrl) {
+        resultErrorText.textContent = "Please set your Google Apps Script URL in Settings first!";
+        resultErrorBanner.classList.remove('hidden');
+        modalSettings.classList.remove('hidden');
+        return;
+      }
+
+      // UI Loading state
+      btnSubmitSheet.disabled = true;
+      spinnerSubmit.classList.remove('hidden');
+      iconSubmitCloud.classList.add('hidden');
+      labelSubmitBtn.textContent = "Uploading to Sheet...";
+      resultErrorBanner.classList.add('hidden');
+      resultSuccessBanner.classList.add('hidden');
+
+      try {
+        // Send as text/plain to bypass CORS preflight (OPTIONS) which Google Apps Script rejects
+        const response = await fetch(targetUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            serialNumber: serial,
+            format: format,
+            clientTimestamp: new Date().toISOString()
+          }),
+          redirect: 'follow'
+        });
+
+        const rawText = await response.text();
+        let resData = {};
+        try { resData = JSON.parse(rawText); } catch(e) {}
+
+        const isSuccess = resData.status === 'success' || response.ok;
+
+        if (isSuccess) {
+          playSuccessChime();
+          triggerHaptic('success');
+
+          resultSuccessText.textContent = resData.message || "Row added successfully!";
+          resultRowNumberText.textContent = resData.row 
+            ? `Appended to Row #${resData.row} (Col A: Date, Col B: Serial)`
+            : "Saved sequentially from row 2 onwards.";
+          resultSuccessBanner.classList.remove('hidden');
+
+          // Log in scan history
+          scanHistory.unshift({
+            id: Date.now().toString(),
+            serialNumber: serial,
+            format: format,
+            timestamp: new Date().toISOString(),
+            status: 'synced',
+            rowNumber: resData.row
+          });
+          if (scanHistory.length > 50) scanHistory.pop();
+          localStorage.setItem('scansheet_history', JSON.stringify(scanHistory));
+          renderHistory();
+
+          // Continuous mode: auto-rescan after 1.5s
+          if (document.getElementById('toggle-continuous').checked) {
+            setTimeout(() => {
+              resumeScanner();
+            }, 1500);
+          }
+        } else {
+          throw new Error(resData.message || "Failed to append row to Google Sheet.");
+        }
+      } catch (err) {
+        console.error("Upload error:", err);
+        resultErrorText.textContent = String(err.message || err || 'Network or CORS error. Verify "Who has access: Anyone" in Apps Script.');
+        resultErrorBanner.classList.remove('hidden');
+
+        scanHistory.unshift({
+          id: Date.now().toString(),
+          serialNumber: serial,
+          format: format,
+          timestamp: new Date().toISOString(),
+          status: 'failed'
+        });
+        localStorage.setItem('scansheet_history', JSON.stringify(scanHistory));
+        renderHistory();
+      } finally {
+        btnSubmitSheet.disabled = false;
+        spinnerSubmit.classList.add('hidden');
+        iconSubmitCloud.classList.remove('hidden');
+        labelSubmitBtn.textContent = "Submit to Sheet";
+      }
+    }
+
+    // Resume / Rescan
+    function resumeScanner() {
+      resultCard.classList.add('hidden');
+      scanPausedBadge.classList.add('hidden');
+      clearTimeout(autoSubmitTimer);
+      if (html5QrCode && isPaused) {
+        html5QrCode.resume();
+        isPaused = false;
+        statusText.textContent = "Scanning active";
+        statusDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse";
+        iconPause.classList.remove('hidden');
+        iconPlay.classList.add('hidden');
+      }
+    }
+
+    // Retry History item
+    window.retryHistoryItem = async function(id) {
+      const item = scanHistory.find(h => h.id === id);
+      if (!item) return;
+      await submitScan(item.serialNumber, item.format);
+    };
+
+    // Copy Serial helper
+    document.getElementById('btn-copy-serial').addEventListener('click', () => {
+      if (!activeSerial) return;
+      navigator.clipboard.writeText(activeSerial);
+      document.getElementById('icon-copy-idle').classList.add('hidden');
+      document.getElementById('icon-copy-done').classList.remove('hidden');
+      setTimeout(() => {
+        document.getElementById('icon-copy-idle').classList.remove('hidden');
+        document.getElementById('icon-copy-done').classList.add('hidden');
+      }, 1500);
+    });
+
+    // Copy Apps Script code
+    document.getElementById('btn-copy-apps-script').addEventListener('click', () => {
+      const code = document.getElementById('pre-apps-script-code').textContent;
+      navigator.clipboard.writeText(code);
+      const label = document.getElementById('label-copy-apps-script');
+      label.textContent = "Copied to Clipboard!";
+      setTimeout(() => { label.textContent = "Copy Script Code"; }, 2000);
+    });
+
+    // Button Event Listeners
+    document.getElementById('btn-submit-sheet').addEventListener('click', () => {
+      if (activeSerial) submitScan(activeSerial, activeFormat);
+    });
+    document.getElementById('btn-rescan-next').addEventListener('click', resumeScanner);
+    document.getElementById('btn-cancel-countdown').addEventListener('click', () => {
+      clearTimeout(autoSubmitTimer);
+      autoSubmitCountdownBar.classList.add('hidden');
+    });
+
+    // Pause toggle
+    btnTogglePause.addEventListener('click', () => {
+      if (!html5QrCode || !isScanning) return;
+      if (isPaused) {
+        resumeScanner();
+      } else {
+        html5QrCode.pause(true);
+        isPaused = true;
+        statusText.textContent = "Paused";
+        statusDot.className = "w-2.5 h-2.5 rounded-full bg-amber-400";
+        scanPausedBadge.classList.remove('hidden');
+        iconPause.classList.add('hidden');
+        iconPlay.classList.remove('hidden');
+      }
+    });
+
+    // Restart Camera
+    document.getElementById('btn-restart-camera').addEventListener('click', () => initScanner());
+    document.getElementById('btn-manual-start-camera').addEventListener('click', () => initScanner());
+    document.getElementById('btn-retry-camera').addEventListener('click', () => initScanner());
+
+    // Camera Switcher
+    if (selectCamera) {
+      selectCamera.addEventListener('change', (e) => {
+        initScanner(e.target.value);
+      });
+    }
+
+    // Image File Barcode Scanning (Works even on devices with zero cameras!)
+    if (btnScanImage) {
+      btnScanImage.addEventListener('click', () => inputBarcodeFile.click());
+    }
+    if (btnUploadFileTrigger) {
+      btnUploadFileTrigger.addEventListener('click', () => inputBarcodeFile.click());
+    }
+    if (btnErrorManualTrigger) {
+      btnErrorManualTrigger.addEventListener('click', () => modalManual.classList.remove('hidden'));
+    }
+
+    if (inputBarcodeFile) {
+      inputBarcodeFile.addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+
+        statusText.textContent = "Decoding image...";
+        statusDot.className = "w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse";
+
+        try {
+          if (!html5QrCode) {
+            html5QrCode = new Html5Qrcode("interactive-reader", { verbose: false });
+          }
+          const decodedText = await html5QrCode.scanFile(file, true);
+          onScanSuccess(decodedText, { result: { format: { formatName: 'IMAGE_SCAN' } } });
+        } catch (fileErr) {
+          console.warn("Image file decoding failed:", fileErr);
+          alert("Could not detect a barcode in this image. Please ensure the barcode is clearly visible and well-lit.");
+          statusText.textContent = "Ready";
+          statusDot.className = "w-2.5 h-2.5 rounded-full bg-slate-500";
+        } finally {
+          inputBarcodeFile.value = '';
+        }
+      });
+    }
+
+    // Torch Toggle
+    btnToggleTorch.addEventListener('click', async () => {
+      if (!torchTrack) return;
+      try {
+        torchOn = !torchOn;
+        await torchTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
+        btnToggleTorch.className = torchOn 
+          ? "p-2 rounded-xl bg-amber-400 text-slate-950 transition" 
+          : "p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white transition";
+      } catch(e) {}
+    });
+
+    // Modals handling
+    document.getElementById('btn-open-settings').addEventListener('click', () => modalSettings.classList.remove('hidden'));
+    document.getElementById('btn-banner-configure').addEventListener('click', () => modalSettings.classList.remove('hidden'));
+    document.getElementById('btn-close-settings').addEventListener('click', () => modalSettings.classList.add('hidden'));
+    document.getElementById('btn-close-settings-footer').addEventListener('click', () => modalSettings.classList.add('hidden'));
+
+    document.getElementById('btn-open-manual-modal').addEventListener('click', () => modalManual.classList.remove('hidden'));
+    document.getElementById('btn-quick-manual').addEventListener('click', () => modalManual.classList.remove('hidden'));
+    document.getElementById('btn-close-manual').addEventListener('click', () => modalManual.classList.add('hidden'));
+    document.getElementById('btn-cancel-manual').addEventListener('click', () => modalManual.classList.add('hidden'));
+
+    document.getElementById('btn-open-script-modal').addEventListener('click', () => modalScript.classList.remove('hidden'));
+    document.getElementById('btn-info-view-guide').addEventListener('click', () => modalScript.classList.remove('hidden'));
+    document.getElementById('btn-settings-open-script').addEventListener('click', () => {
+      modalSettings.classList.add('hidden');
+      modalScript.classList.remove('hidden');
+    });
+    document.getElementById('btn-close-script').addEventListener('click', () => modalScript.classList.add('hidden'));
+    document.getElementById('btn-close-script-footer').addEventListener('click', () => modalScript.classList.add('hidden'));
+
+    // Save Settings
+    document.getElementById('btn-save-settings').addEventListener('click', () => {
+      webAppUrl = inputScriptUrl.value.trim();
+      localStorage.setItem('scansheet_script_url', webAppUrl);
+      if (webAppUrl) {
+        urlBanner.classList.add('hidden');
+        settingsWarningDot.classList.add('hidden');
+      } else {
+        urlBanner.classList.remove('hidden');
+        settingsWarningDot.classList.remove('hidden');
+      }
+      modalSettings.classList.add('hidden');
+    });
+
+    // Test Connection
+    document.getElementById('btn-test-connection').addEventListener('click', async () => {
+      const feedback = document.getElementById('test-connection-feedback');
+      const url = inputScriptUrl.value.trim();
+      if (!url) {
+        feedback.className = "p-3 rounded-2xl border text-xs flex items-start space-x-2 mt-2 bg-rose-500/10 border-rose-500/20 text-rose-300";
+        feedback.textContent = "Please enter a URL first.";
+        feedback.classList.remove('hidden');
+        return;
+      }
+      feedback.className = "p-3 rounded-2xl border text-xs flex items-start space-x-2 mt-2 bg-amber-500/10 border-amber-500/20 text-amber-300";
+      feedback.textContent = "Testing connection to Google Apps Script...";
+      feedback.classList.remove('hidden');
+
+      try {
+        const res = await fetch(url, { method: 'GET', redirect: 'follow' });
+        feedback.className = "p-3 rounded-2xl border text-xs flex items-start space-x-2 mt-2 bg-emerald-500/10 border-emerald-500/20 text-emerald-300";
+        feedback.textContent = "✓ Connected successfully! Web App endpoint is live and responding.";
+      } catch (err) {
+        feedback.className = "p-3 rounded-2xl border text-xs flex items-start space-x-2 mt-2 bg-rose-500/10 border-rose-500/20 text-rose-300";
+        feedback.textContent = "Connection failed. Please ensure 'Who has access: Anyone' is selected in Apps Script deployment.";
+      }
+    });
+
+    // Manual Form Submit
+    document.getElementById('form-manual-entry').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const serial = document.getElementById('input-manual-serial').value.trim();
+      const errEl = document.getElementById('manual-error-text');
+      if (!serial) {
+        errEl.textContent = "Please enter a serial number.";
+        errEl.classList.remove('hidden');
+        return;
+      }
+      errEl.classList.add('hidden');
+      modalManual.classList.add('hidden');
+      document.getElementById('input-manual-serial').value = '';
+      await submitScan(serial, 'MANUAL');
+    });
+
+    // Clear History
+    document.getElementById('btn-clear-history').addEventListener('click', () => {
+      if (confirm('Clear local scan history?')) {
+        scanHistory = [];
+        localStorage.removeItem('scansheet_history');
+        renderHistory();
+      }
+    });
+
+    // Export CSV
+    document.getElementById('btn-export-csv').addEventListener('click', () => {
+      if (scanHistory.length === 0) return;
+      const header = 'Timestamp,Serial Number,Format,Status,Row Number\n';
+      const rows = scanHistory.map(h => 
+        `"${h.timestamp}","${(h.serialNumber||'').replace(/"/g, '""')}","${h.format||''}","${h.status||''}","${h.rowNumber||''}"`
+      ).join('\n');
+      const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `scansheet_export_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // Auto-start camera when page loads
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(initScanner, 400);
+    });
+  </script>
+</body>
+</html>

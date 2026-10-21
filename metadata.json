@@ -1,0 +1,10 @@
+{
+  "name": "ScanSheet - Mobile Barcode to Google Sheets",
+  "description": "High-performance mobile barcode & QR scanner that automatically logs serial numbers with timestamps directly into Google Sheets via Google Apps Script.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
